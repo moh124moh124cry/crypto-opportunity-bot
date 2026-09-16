@@ -120,6 +120,21 @@ function calculateEma(values, period) {
   return round(ema);
 }
 
+function getEmaTrend(ema20, ema50) {
+  if (ema20 === null || ema50 === null || ema50 === 0) {
+    return "neutral";
+  }
+
+  const differencePercent =
+    Math.abs(((ema20 - ema50) / ema50) * 100);
+
+  if (differencePercent < 0.05) {
+    return "neutral";
+  }
+
+  return ema20 > ema50 ? "bullish" : "bearish";
+}
+
 export default async function handler(req, res) {
   if (req.method !== "GET") {
     res.setHeader("Allow", ["GET"]);
@@ -206,6 +221,7 @@ export default async function handler(req, res) {
     const rsi14 = calculateRsi(closes, 14);
     const ema20 = calculateEma(closes, 20);
     const ema50 = calculateEma(closes, 50);
+    const emaTrend = getEmaTrend(ema20, ema50);
 
     res.setHeader(
       "Cache-Control",
@@ -224,6 +240,7 @@ export default async function handler(req, res) {
         rsiState: getRsiState(rsi14),
         ema20,
         ema50,
+        emaTrend,
       },
       indicatorNote:
         "RSI and EMA are technical indicators only and are not trading recommendations.",
