@@ -32,6 +32,75 @@ function normalizeCandle(item) {
   };
 }
 
+function round(value, decimals = 2) {
+  const factor = 10 ** decimals;
+  return Math.round(value * factor) / factor;
+}
+
+function calculateRsi(closes, period = 14) {
+  if (!Array.isArray(closes) || closes.length <= period) {
+    return null;
+  }
+
+  let gainSum = 0;
+  let lossSum = 0;
+
+  for (let i = 1; i <= period; i += 1) {
+    const change = closes[i] - closes[i - 1];
+
+    if (change > 0) {
+      gainSum += change;
+    } else if (change < 0) {
+      lossSum += Math.abs(change);
+    }
+  }
+
+  let averageGain = gainSum / period;
+  let averageLoss = lossSum / period;
+
+  for (let i = period + 1; i < closes.length; i += 1) {
+    const change = closes[i] - closes[i - 1];
+    const gain = change > 0 ? change : 0;
+    const loss = change < 0 ? Math.abs(change) : 0;
+
+    averageGain = ((averageGain * (period - 1)) + gain) / period;
+    averageLoss = ((averageLoss * (period - 1)) + loss) / period;
+  }
+
+  if (averageGain === 0 && averageLoss === 0) {
+    return 50;
+  }
+
+  if (averageLoss === 0) {
+    return 100;
+  }
+
+  if (averageGain === 0) {
+    return 0;
+  }
+
+  const relativeStrength = averageGain / averageLoss;
+  const rsi = 100 - (100 / (1 + relativeStrength));
+
+  return round(rsi);
+}
+
+function getRsiState(rsi) {
+  if (rsi === null) {
+    return "unavailable";
+  }
+
+  if (rsi >= 70) {
+    return "overbought";
+  }
+
+  if (rsi <= 30) {
+    return "oversold";
+  }
+
+  return "neutral";
+}
+
 export default async function handler(req, res) {
   if (req.method !== "GET") {
     res.setHeader("Allow", ["GET"]);
@@ -113,6 +182,9 @@ export default async function handler(req, res) {
       ? data.map(normalizeCandle)
       : [];
 
+    const closes = candles.map((candle) => candle.close);
+    const rsi14 = calculateRsi(closes, 14);
+
     res.setHeader(
       "Cache-Control",
       "s-maxage=10, stale-while-revalidate=20"
@@ -125,6 +197,12 @@ export default async function handler(req, res) {
       symbol,
       interval,
       count: candles.length,
+      indicators: {
+        rsi14,
+        rsiState: getRsiState(rsi14),
+      },
+      indicatorNote:
+        "RSI is a technical indicator only and is not a trading recommendation.",
       candles,
       fetchedAt: new Date().toISOString(),
     });
