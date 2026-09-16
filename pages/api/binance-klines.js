@@ -101,6 +101,25 @@ function getRsiState(rsi) {
   return "neutral";
 }
 
+function calculateEma(values, period) {
+  if (!Array.isArray(values) || values.length < period) {
+    return null;
+  }
+
+  const seedValues = values.slice(0, period);
+
+  let ema =
+    seedValues.reduce((sum, value) => sum + value, 0) / period;
+
+  const multiplier = 2 / (period + 1);
+
+  for (let i = period; i < values.length; i += 1) {
+    ema = ((values[i] - ema) * multiplier) + ema;
+  }
+
+  return round(ema);
+}
+
 export default async function handler(req, res) {
   if (req.method !== "GET") {
     res.setHeader("Allow", ["GET"]);
@@ -183,7 +202,10 @@ export default async function handler(req, res) {
       : [];
 
     const closes = candles.map((candle) => candle.close);
+
     const rsi14 = calculateRsi(closes, 14);
+    const ema20 = calculateEma(closes, 20);
+    const ema50 = calculateEma(closes, 50);
 
     res.setHeader(
       "Cache-Control",
@@ -200,9 +222,11 @@ export default async function handler(req, res) {
       indicators: {
         rsi14,
         rsiState: getRsiState(rsi14),
+        ema20,
+        ema50,
       },
       indicatorNote:
-        "RSI is a technical indicator only and is not a trading recommendation.",
+        "RSI and EMA are technical indicators only and are not trading recommendations.",
       candles,
       fetchedAt: new Date().toISOString(),
     });
