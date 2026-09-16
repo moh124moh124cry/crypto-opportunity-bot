@@ -23,7 +23,7 @@ export default async function handler(req, res) {
 
   try {
     const url =
-      `https://api.binance.com/api/v3/ticker/24hr?symbol=${encodeURIComponent(symbol)}`;
+      `https://data-api.binance.vision/api/v3/ticker/24hr?symbol=${encodeURIComponent(symbol)}`;
 
     const response = await fetch(url, {
       method: "GET",
