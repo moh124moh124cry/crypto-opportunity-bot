@@ -32,6 +32,10 @@ function normalizeCandle(item) {
   };
 }
 
+function clamp(value, min, max) {
+  return Math.min(Math.max(value, min), max);
+}
+
 function round(value, decimals = 2) {
   const factor = 10 ** decimals;
   return Math.round(value * factor) / factor;
@@ -135,6 +139,54 @@ function getEmaTrend(ema20, ema50) {
   return ema20 > ema50 ? "bullish" : "bearish";
 }
 
+function calculateTechnicalScore(rsi14, ema20, ema50, emaTrend) {
+  if (
+    rsi14 === null ||
+    ema20 === null ||
+    ema50 === null ||
+    ema50 === 0
+  ) {
+    return {
+      technicalScore: null,
+      technicalLevel: "unavailable",
+    };
+  }
+
+  const emaSeparationPercent =
+    Math.abs(((ema20 - ema50) / ema50) * 100);
+
+  const emaScore = emaTrend === "neutral"
+    ? 10
+    : clamp(20 + (emaSeparationPercent / 0.5) * 40, 20, 60);
+
+  let rsiScore = 0;
+
+  if (emaTrend === "bullish") {
+    rsiScore = clamp(40 - Math.abs(rsi14 - 60) * 2, 0, 40);
+  } else if (emaTrend === "bearish") {
+    rsiScore = clamp(40 - Math.abs(rsi14 - 40) * 2, 0, 40);
+  } else {
+    rsiScore = clamp(20 - Math.abs(rsi14 - 50), 0, 20);
+  }
+
+  const technicalScore = round(
+    clamp(emaScore + rsiScore, 0, 100)
+  );
+
+  let technicalLevel = "low";
+
+  if (technicalScore >= 70) {
+    technicalLevel = "high";
+  } else if (technicalScore >= 40) {
+    technicalLevel = "medium";
+  }
+
+  return {
+    technicalScore,
+    technicalLevel,
+  };
+}
+
 export default async function handler(req, res) {
   if (req.method !== "GET") {
     res.setHeader("Allow", ["GET"]);
@@ -223,6 +275,13 @@ export default async function handler(req, res) {
     const ema50 = calculateEma(closes, 50);
     const emaTrend = getEmaTrend(ema20, ema50);
 
+    const technical = calculateTechnicalScore(
+      rsi14,
+      ema20,
+      ema50,
+      emaTrend
+    );
+
     res.setHeader(
       "Cache-Control",
       "s-maxage=10, stale-while-revalidate=20"
@@ -241,9 +300,12 @@ export default async function handler(req, res) {
         ema20,
         ema50,
         emaTrend,
+        technicalScore: technical.technicalScore,
+        technicalLevel: technical.technicalLevel,
       },
+      technicalScoreModel: "rsi14-ema20-ema50-v1",
       indicatorNote:
-        "RSI and EMA are technical indicators only and are not trading recommendations.",
+        "Technical Score is a market-filtering heuristic based on RSI and EMA alignment, not a trading recommendation or profit guarantee.",
       candles,
       fetchedAt: new Date().toISOString(),
     });
