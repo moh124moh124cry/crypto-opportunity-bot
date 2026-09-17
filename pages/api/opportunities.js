@@ -1,3 +1,7 @@
+import {
+  fetchAllExchangeTickers,
+} from "../../lib/exchanges";
+
 const DEFAULT_SYMBOLS = [
   "BTCUSDT",
   "ETHUSDT",
@@ -12,91 +16,158 @@ const KLINE_LIMIT = 100;
 const ORDER_BOOK_LIMIT = 100;
 
 function clamp(value, min, max) {
-  return Math.min(Math.max(value, min), max);
+  return Math.min(
+    Math.max(value, min),
+    max
+  );
 }
 
 function round(value, decimals = 2) {
   const factor = 10 ** decimals;
-  return Math.round(value * factor) / factor;
+
+  return (
+    Math.round(value * factor) /
+    factor
+  );
 }
 
 function boostStrength(strength) {
-  if (strength === "low") return "medium";
-  if (strength === "medium") return "high";
+  if (strength === "low") {
+    return "medium";
+  }
+
+  if (strength === "medium") {
+    return "high";
+  }
+
   return strength;
 }
 
-function calculateOpportunity(ticker) {
-  const price = Number(ticker.price);
-  const highPrice = Number(ticker.highPrice);
-  const lowPrice = Number(ticker.lowPrice);
-  const quoteVolume = Number(ticker.quoteVolume);
-  const priceChangePercent = Number(ticker.priceChangePercent);
+function calculateOpportunity(
+  ticker
+) {
+  const price =
+    Number(ticker.price);
 
-  const momentumScore = clamp(
-    Math.abs(priceChangePercent) * 8,
-    0,
-    40
-  );
+  const highPrice =
+    Number(ticker.highPrice);
+
+  const lowPrice =
+    Number(ticker.lowPrice);
+
+  const quoteVolume =
+    Number(ticker.quoteVolume);
+
+  const priceChangePercent =
+    Number(
+      ticker.priceChangePercent
+    );
+
+  const momentumScore =
+    clamp(
+      Math.abs(
+        priceChangePercent
+      ) * 8,
+      0,
+      40
+    );
 
   const liquidityScore =
     quoteVolume > 0
       ? clamp(
-          ((Math.log10(quoteVolume) - 6) / 4) * 30,
+          (
+            (
+              Math.log10(
+                quoteVolume
+              ) - 6
+            ) / 4
+          ) * 30,
           0,
           30
         )
       : 0;
 
-  const rangeSize = highPrice - lowPrice;
+  const rangeSize =
+    highPrice - lowPrice;
 
   const rangePosition =
     rangeSize > 0
       ? clamp(
-          ((price - lowPrice) / rangeSize) * 100,
+          (
+            (
+              price -
+              lowPrice
+            ) /
+            rangeSize
+          ) * 100,
           0,
           100
         )
       : 50;
 
-  let trendBias = "neutral";
+  let trendBias =
+    "neutral";
 
-  if (priceChangePercent >= 0.5) {
-    trendBias = "bullish";
-  } else if (priceChangePercent <= -0.5) {
-    trendBias = "bearish";
+  if (
+    priceChangePercent >= 0.5
+  ) {
+    trendBias =
+      "bullish";
+  } else if (
+    priceChangePercent <= -0.5
+  ) {
+    trendBias =
+      "bearish";
   }
 
   let positionStrength = 25;
 
-  if (trendBias === "bullish") {
-    positionStrength = rangePosition;
-  } else if (trendBias === "bearish") {
-    positionStrength = 100 - rangePosition;
+  if (
+    trendBias === "bullish"
+  ) {
+    positionStrength =
+      rangePosition;
+  } else if (
+    trendBias === "bearish"
+  ) {
+    positionStrength =
+      100 - rangePosition;
   }
 
-  const positionScore = clamp(
-    (positionStrength / 100) * 30,
-    0,
-    30
-  );
-
-  const opportunityScore = round(
+  const positionScore =
     clamp(
-      momentumScore +
-        liquidityScore +
-        positionScore,
+      (
+        positionStrength /
+        100
+      ) * 30,
       0,
-      100
-    )
-  );
+      30
+    );
 
-  let opportunityLevel = "low";
+  const opportunityScore =
+    round(
+      clamp(
+        momentumScore +
+          liquidityScore +
+          positionScore,
+        0,
+        100
+      )
+    );
 
-  if (opportunityScore >= 75) {
-    opportunityLevel = "high";
-  } else if (opportunityScore >= 55) {
-    opportunityLevel = "medium";
+  let opportunityLevel =
+    "low";
+
+  if (
+    opportunityScore >= 75
+  ) {
+    opportunityLevel =
+      "high";
+  } else if (
+    opportunityScore >= 55
+  ) {
+    opportunityLevel =
+      "medium";
   }
 
   return {
@@ -108,27 +179,59 @@ function calculateOpportunity(ticker) {
 
 function normalizeTicker(data) {
   const ticker = {
-    symbol: data.symbol,
-    price: Number(data.lastPrice),
-    priceChangePercent: Number(
-      data.priceChangePercent
-    ),
-    openPrice: Number(data.openPrice),
-    highPrice: Number(data.highPrice),
-    lowPrice: Number(data.lowPrice),
-    quoteVolume: Number(data.quoteVolume),
-    tradeCount: data.count,
+    symbol:
+      data.symbol,
+
+    price:
+      Number(
+        data.lastPrice
+      ),
+
+    priceChangePercent:
+      Number(
+        data.priceChangePercent
+      ),
+
+    openPrice:
+      Number(
+        data.openPrice
+      ),
+
+    highPrice:
+      Number(
+        data.highPrice
+      ),
+
+    lowPrice:
+      Number(
+        data.lowPrice
+      ),
+
+    quoteVolume:
+      Number(
+        data.quoteVolume
+      ),
+
+    tradeCount:
+      data.count,
   };
 
   return {
     ...ticker,
-    ...calculateOpportunity(ticker),
+    ...calculateOpportunity(
+      ticker
+    ),
   };
 }
 
-function calculateRsi(closes, period = 14) {
+function calculateRsi(
+  closes,
+  period = 14
+) {
   if (
-    !Array.isArray(closes) ||
+    !Array.isArray(
+      closes
+    ) ||
     closes.length <= period
   ) {
     return null;
@@ -137,14 +240,22 @@ function calculateRsi(closes, period = 14) {
   let gainSum = 0;
   let lossSum = 0;
 
-  for (let i = 1; i <= period; i += 1) {
+  for (
+    let i = 1;
+    i <= period;
+    i += 1
+  ) {
     const change =
-      closes[i] - closes[i - 1];
+      closes[i] -
+      closes[i - 1];
 
     if (change > 0) {
       gainSum += change;
-    } else if (change < 0) {
-      lossSum += Math.abs(change);
+    } else if (
+      change < 0
+    ) {
+      lossSum +=
+        Math.abs(change);
     }
   }
 
@@ -155,15 +266,19 @@ function calculateRsi(closes, period = 14) {
     lossSum / period;
 
   for (
-    let i = period + 1;
+    let i =
+      period + 1;
     i < closes.length;
     i += 1
   ) {
     const change =
-      closes[i] - closes[i - 1];
+      closes[i] -
+      closes[i - 1];
 
     const gain =
-      change > 0 ? change : 0;
+      change > 0
+        ? change
+        : 0;
 
     const loss =
       change < 0
@@ -192,21 +307,29 @@ function calculateRsi(closes, period = 14) {
     return 50;
   }
 
-  if (averageLoss === 0) {
+  if (
+    averageLoss === 0
+  ) {
     return 100;
   }
 
-  if (averageGain === 0) {
+  if (
+    averageGain === 0
+  ) {
     return 0;
   }
 
   const relativeStrength =
-    averageGain / averageLoss;
+    averageGain /
+    averageLoss;
 
   return round(
     100 -
       100 /
-        (1 + relativeStrength)
+        (
+          1 +
+          relativeStrength
+        )
   );
 }
 
@@ -226,9 +349,14 @@ function getRsiState(rsi) {
   return "neutral";
 }
 
-function calculateEma(values, period) {
+function calculateEma(
+  values,
+  period
+) {
   if (
-    !Array.isArray(values) ||
+    !Array.isArray(
+      values
+    ) ||
     values.length < period
   ) {
     return null;
@@ -236,15 +364,22 @@ function calculateEma(values, period) {
 
   let ema =
     values
-      .slice(0, period)
+      .slice(
+        0,
+        period
+      )
       .reduce(
-        (sum, value) =>
+        (
+          sum,
+          value
+        ) =>
           sum + value,
         0
       ) / period;
 
   const multiplier =
-    2 / (period + 1);
+    2 /
+    (period + 1);
 
   for (
     let i = period;
@@ -253,7 +388,8 @@ function calculateEma(values, period) {
   ) {
     ema =
       (
-        values[i] - ema
+        values[i] -
+        ema
       ) *
         multiplier +
       ema;
@@ -262,7 +398,10 @@ function calculateEma(values, period) {
   return round(ema);
 }
 
-function getEmaTrend(ema20, ema50) {
+function getEmaTrend(
+  ema20,
+  ema50
+) {
   if (
     ema20 === null ||
     ema50 === null ||
@@ -274,13 +413,17 @@ function getEmaTrend(ema20, ema50) {
   const differencePercent =
     Math.abs(
       (
-        (ema20 - ema50) /
+        (
+          ema20 -
+          ema50
+        ) /
         ema50
       ) * 100
     );
 
   if (
-    differencePercent < 0.05
+    differencePercent <
+    0.05
   ) {
     return "neutral";
   }
@@ -303,7 +446,9 @@ function calculateTechnicalScore(
     ema50 === 0
   ) {
     return {
-      technicalScore: null,
+      technicalScore:
+        null,
+
       technicalLevel:
         "unavailable",
     };
@@ -312,13 +457,17 @@ function calculateTechnicalScore(
   const emaSeparationPercent =
     Math.abs(
       (
-        (ema20 - ema50) /
+        (
+          ema20 -
+          ema50
+        ) /
         ema50
       ) * 100
     );
 
   const emaScore =
-    emaTrend === "neutral"
+    emaTrend ===
+    "neutral"
       ? 10
       : clamp(
           20 +
@@ -333,37 +482,44 @@ function calculateTechnicalScore(
 
   let rsiScore = 0;
 
-  if (emaTrend === "bullish") {
-    rsiScore = clamp(
-      40 -
-        Math.abs(
-          rsi14 - 60
-        ) *
-          2,
-      0,
-      40
-    );
-  } else if (
-    emaTrend === "bearish"
+  if (
+    emaTrend ===
+    "bullish"
   ) {
-    rsiScore = clamp(
-      40 -
-        Math.abs(
-          rsi14 - 40
-        ) *
-          2,
-      0,
-      40
-    );
+    rsiScore =
+      clamp(
+        40 -
+          Math.abs(
+            rsi14 - 60
+          ) *
+            2,
+        0,
+        40
+      );
+  } else if (
+    emaTrend ===
+    "bearish"
+  ) {
+    rsiScore =
+      clamp(
+        40 -
+          Math.abs(
+            rsi14 - 40
+          ) *
+            2,
+        0,
+        40
+      );
   } else {
-    rsiScore = clamp(
-      20 -
-        Math.abs(
-          rsi14 - 50
-        ),
-      0,
-      20
-    );
+    rsiScore =
+      clamp(
+        20 -
+          Math.abs(
+            rsi14 - 50
+          ),
+        0,
+        20
+      );
   }
 
   const technicalScore =
@@ -379,7 +535,9 @@ function calculateTechnicalScore(
   let technicalLevel =
     "low";
 
-  if (technicalScore >= 70) {
+  if (
+    technicalScore >= 70
+  ) {
     technicalLevel =
       "high";
   } else if (
@@ -427,12 +585,14 @@ function calculateFinalScore(
     "low";
 
   if (
-    finalOpportunityScore >= 70
+    finalOpportunityScore >=
+    70
   ) {
     finalOpportunityLevel =
       "high";
   } else if (
-    finalOpportunityScore >= 50
+    finalOpportunityScore >=
+    50
   ) {
     finalOpportunityLevel =
       "medium";
@@ -451,25 +611,33 @@ function calculatePaperSignal({
   finalOpportunityScore,
 }) {
   if (
-    finalOpportunityScore === null ||
+    finalOpportunityScore ===
+      null ||
     rsi14 === null
   ) {
     return {
-      paperSignal: "WAIT",
+      paperSignal:
+        "WAIT",
+
       signalStrength:
         "unavailable",
+
       signalReason:
         "Insufficient technical data",
     };
   }
 
   const bullishAlignment =
-    trendBias === "bullish" &&
-    emaTrend === "bullish";
+    trendBias ===
+      "bullish" &&
+    emaTrend ===
+      "bullish";
 
   const bearishAlignment =
-    trendBias === "bearish" &&
-    emaTrend === "bearish";
+    trendBias ===
+      "bearish" &&
+    emaTrend ===
+      "bearish";
 
   const longRsiHealthy =
     rsi14 >= 45 &&
@@ -479,7 +647,8 @@ function calculatePaperSignal({
     rsi14 >= 32 &&
     rsi14 <= 55;
 
-  let paperSignal = "WAIT";
+  let paperSignal =
+    "WAIT";
 
   let signalReason =
     "Trend alignment or score threshold not confirmed";
@@ -490,7 +659,8 @@ function calculatePaperSignal({
     bullishAlignment &&
     longRsiHealthy
   ) {
-    paperSignal = "LONG";
+    paperSignal =
+      "LONG";
 
     signalReason =
       "24h trend and 15m EMA trend are bullish with supportive RSI";
@@ -500,28 +670,34 @@ function calculatePaperSignal({
     bearishAlignment &&
     shortRsiHealthy
   ) {
-    paperSignal = "SHORT";
+    paperSignal =
+      "SHORT";
 
     signalReason =
       "24h trend and 15m EMA trend are bearish with supportive RSI";
   }
 
-  let signalStrength = "low";
+  let signalStrength =
+    "low";
 
   if (
-    paperSignal === "WAIT"
+    paperSignal ===
+    "WAIT"
   ) {
-    signalStrength = "none";
+    signalStrength =
+      "none";
   } else if (
     finalOpportunityScore >=
     75
   ) {
-    signalStrength = "high";
+    signalStrength =
+      "high";
   } else if (
     finalOpportunityScore >=
     65
   ) {
-    signalStrength = "medium";
+    signalStrength =
+      "medium";
   }
 
   return {
@@ -573,7 +749,8 @@ function getOrderBookBias(
   }
 
   if (
-    imbalancePercent <= -10
+    imbalancePercent <=
+    -10
   ) {
     return "bearish";
   }
@@ -586,11 +763,13 @@ function applyOrderBookConfirmation(
   orderBook
 ) {
   const orderBookBias =
-    orderBook?.orderBookBias ??
+    orderBook
+      ?.orderBookBias ??
     "unavailable";
 
   const imbalancePercent =
-    orderBook?.imbalancePercent ??
+    orderBook
+      ?.imbalancePercent ??
     null;
 
   if (
@@ -652,7 +831,8 @@ function applyOrderBookConfirmation(
 
       signalStrength:
         boostStrength(
-          signal.signalStrength
+          signal
+            .signalStrength
         ),
 
       orderBookConfirmation:
@@ -666,7 +846,8 @@ function applyOrderBookConfirmation(
   return {
     ...signal,
 
-    signalStrength: "low",
+    signalStrength:
+      "low",
 
     orderBookConfirmation:
       "conflict",
@@ -681,7 +862,8 @@ function applyMultiTimeframeConfirmation(
   hourlyTechnical
 ) {
   const hourlyTrend =
-    hourlyTechnical?.emaTrend ??
+    hourlyTechnical
+      ?.emaTrend ??
     "unavailable";
 
   if (
@@ -709,7 +891,8 @@ function applyMultiTimeframeConfirmation(
   }
 
   if (
-    hourlyTrend === "neutral"
+    hourlyTrend ===
+    "neutral"
   ) {
     return {
       ...signal,
@@ -738,7 +921,8 @@ function applyMultiTimeframeConfirmation(
 
   if (aligned) {
     const canBoost =
-      signal.orderBookConfirmation !==
+      signal
+        .orderBookConfirmation !==
       "conflict";
 
     return {
@@ -747,9 +931,11 @@ function applyMultiTimeframeConfirmation(
       signalStrength:
         canBoost
           ? boostStrength(
-              signal.signalStrength
+              signal
+                .signalStrength
             )
-          : signal.signalStrength,
+          : signal
+              .signalStrength,
 
       multiTimeframeConfirmation:
         "aligned",
@@ -762,13 +948,236 @@ function applyMultiTimeframeConfirmation(
   return {
     ...signal,
 
-    signalStrength: "low",
+    signalStrength:
+      "low",
 
     multiTimeframeConfirmation:
       "conflict",
 
     signalReason:
       `${signal.signalReason}; 1h EMA trend conflicts (${hourlyTrend})`,
+  };
+}
+
+function buildExchangeConsensus(
+  exchangeData
+) {
+  const results =
+    Array.isArray(
+      exchangeData?.results
+    )
+      ? exchangeData.results
+      : [];
+
+  const directions = {};
+
+  let bullishCount = 0;
+  let bearishCount = 0;
+  let neutralCount = 0;
+  let successCount = 0;
+
+  for (
+    const item of results
+  ) {
+    if (!item?.ok) {
+      continue;
+    }
+
+    const change =
+      Number(
+        item
+          .priceChangePercent
+      );
+
+    if (
+      !Number.isFinite(
+        change
+      )
+    ) {
+      continue;
+    }
+
+    successCount += 1;
+
+    let direction =
+      "neutral";
+
+    if (change > 0) {
+      direction =
+        "bullish";
+
+      bullishCount += 1;
+    } else if (
+      change < 0
+    ) {
+      direction =
+        "bearish";
+
+      bearishCount += 1;
+    } else {
+      neutralCount += 1;
+    }
+
+    directions[
+      item.exchange
+    ] = {
+      direction,
+
+      priceChangePercent:
+        round(
+          change,
+          4
+        ),
+    };
+  }
+
+  let exchangeConsensus =
+    "unavailable";
+
+  if (
+    successCount >= 2
+  ) {
+    if (
+      bullishCount >= 2
+    ) {
+      exchangeConsensus =
+        "bullish";
+    } else if (
+      bearishCount >= 2
+    ) {
+      exchangeConsensus =
+        "bearish";
+    } else if (
+      neutralCount ===
+      successCount
+    ) {
+      exchangeConsensus =
+        "neutral";
+    } else {
+      exchangeConsensus =
+        "mixed";
+    }
+  }
+
+  return {
+    exchangeConsensus,
+    exchangeSuccessCount:
+      successCount,
+    exchangeBullishCount:
+      bullishCount,
+    exchangeBearishCount:
+      bearishCount,
+    exchangeNeutralCount:
+      neutralCount,
+    exchangeDirections:
+      directions,
+  };
+}
+
+function applyExchangeConfirmation(
+  signal,
+  exchangeAnalysis
+) {
+  const consensus =
+    exchangeAnalysis
+      ?.exchangeConsensus ??
+    "unavailable";
+
+  if (
+    signal.paperSignal ===
+    "WAIT"
+  ) {
+    return {
+      ...signal,
+
+      exchangeConfirmation:
+        "not-applicable",
+    };
+  }
+
+  if (
+    consensus ===
+    "unavailable"
+  ) {
+    return {
+      ...signal,
+
+      exchangeConfirmation:
+        "unavailable",
+    };
+  }
+
+  if (
+    consensus ===
+      "mixed" ||
+    consensus ===
+      "neutral"
+  ) {
+    return {
+      ...signal,
+
+      exchangeConfirmation:
+        consensus,
+
+      signalReason:
+        `${signal.signalReason}; external exchange consensus is ${consensus}`,
+    };
+  }
+
+  const aligned =
+    (
+      signal.paperSignal ===
+        "LONG" &&
+      consensus ===
+        "bullish"
+    ) ||
+    (
+      signal.paperSignal ===
+        "SHORT" &&
+      consensus ===
+        "bearish"
+    );
+
+  if (aligned) {
+    const canBoost =
+      signal
+        .orderBookConfirmation !==
+        "conflict" &&
+      signal
+        .multiTimeframeConfirmation !==
+        "conflict";
+
+    return {
+      ...signal,
+
+      signalStrength:
+        canBoost
+          ? boostStrength(
+              signal
+                .signalStrength
+            )
+          : signal
+              .signalStrength,
+
+      exchangeConfirmation:
+        "aligned",
+
+      signalReason:
+        `${signal.signalReason}; Bybit, OKX and Bitget consensus confirms ${consensus} direction`,
+    };
+  }
+
+  return {
+    ...signal,
+
+    signalStrength:
+      "low",
+
+    exchangeConfirmation:
+      "conflict",
+
+    signalReason:
+      `${signal.signalReason}; external exchange consensus conflicts (${consensus})`,
   };
 }
 
@@ -782,16 +1191,19 @@ async function fetchTechnical(
       new URLSearchParams({
         symbol,
         interval,
-        limit: String(
-          KLINE_LIMIT
-        ),
+
+        limit:
+          String(
+            KLINE_LIMIT
+          ),
       });
 
     const response =
       await fetch(
         `https://data-api.binance.vision/api/v3/klines?${params.toString()}`,
         {
-          method: "GET",
+          method:
+            "GET",
 
           headers: {
             Accept:
@@ -839,7 +1251,9 @@ async function fetchTechnical(
     const closes =
       data.map(
         (candle) =>
-          Number(candle[4])
+          Number(
+            candle[4]
+          )
       );
 
     const rsi14 =
@@ -940,16 +1354,18 @@ async function fetchOrderBook(
       new URLSearchParams({
         symbol,
 
-        limit: String(
-          ORDER_BOOK_LIMIT
-        ),
+        limit:
+          String(
+            ORDER_BOOK_LIMIT
+          ),
       });
 
     const response =
       await fetch(
         `https://data-api.binance.vision/api/v3/depth?${params.toString()}`,
         {
-          method: "GET",
+          method:
+            "GET",
 
           headers: {
             Accept:
@@ -963,7 +1379,9 @@ async function fetchOrderBook(
     const data =
       await response.json();
 
-    if (!response.ok) {
+    if (
+      !response.ok
+    ) {
       return {
         symbol,
 
@@ -1059,7 +1477,8 @@ export default async function handler(
   res
 ) {
   if (
-    req.method !== "GET"
+    req.method !==
+    "GET"
   ) {
     res.setHeader(
       "Allow",
@@ -1070,6 +1489,7 @@ export default async function handler(
       .status(405)
       .json({
         ok: false,
+
         error:
           "Method not allowed",
       });
@@ -1102,7 +1522,9 @@ export default async function handler(
 
   const symbols =
     requestedSymbol
-      ? [requestedSymbol]
+      ? [
+          requestedSymbol,
+        ]
       : DEFAULT_SYMBOLS;
 
   const controller =
@@ -1139,7 +1561,8 @@ export default async function handler(
       await fetch(
         `https://data-api.binance.vision/api/v3/ticker/24hr?${tickerParams.toString()}`,
         {
-          method: "GET",
+          method:
+            "GET",
 
           headers: {
             Accept:
@@ -1192,6 +1615,7 @@ export default async function handler(
       primaryTechnicalResults,
       hourlyTechnicalResults,
       orderBookResults,
+      exchangeResults,
     ] =
       await Promise.all([
         Promise.all(
@@ -1222,6 +1646,15 @@ export default async function handler(
               fetchOrderBook(
                 ticker.symbol,
                 controller.signal
+              )
+          )
+        ),
+
+        Promise.all(
+          tickers.map(
+            (ticker) =>
+              fetchAllExchangeTickers(
+                ticker.symbol
               )
           )
         ),
@@ -1257,6 +1690,16 @@ export default async function handler(
         )
       );
 
+    const exchangesBySymbol =
+      new Map(
+        exchangeResults.map(
+          (item) => [
+            item.symbol,
+            item,
+          ]
+        )
+      );
+
     const opportunities =
       tickers
         .map(
@@ -1265,13 +1708,17 @@ export default async function handler(
               primaryTechnicalBySymbol.get(
                 ticker.symbol
               ) || {
-                rsi14: null,
+                rsi14:
+                  null,
 
                 rsiState:
                   "unavailable",
 
-                ema20: null,
-                ema50: null,
+                ema20:
+                  null,
+
+                ema50:
+                  null,
 
                 emaTrend:
                   "unavailable",
@@ -1290,13 +1737,17 @@ export default async function handler(
               hourlyTechnicalBySymbol.get(
                 ticker.symbol
               ) || {
-                rsi14: null,
+                rsi14:
+                  null,
 
                 rsiState:
                   "unavailable",
 
-                ema20: null,
-                ema50: null,
+                ema20:
+                  null,
+
+                ema50:
+                  null,
 
                 emaTrend:
                   "unavailable",
@@ -1325,6 +1776,25 @@ export default async function handler(
                   "Order book result unavailable",
               };
 
+            const externalExchanges =
+              exchangesBySymbol.get(
+                ticker.symbol
+              ) || {
+                symbol:
+                  ticker.symbol,
+
+                successCount:
+                  0,
+
+                results:
+                  [],
+              };
+
+            const exchangeAnalysis =
+              buildExchangeConsensus(
+                externalExchanges
+              );
+
             const finalScore =
               calculateFinalScore(
                 ticker
@@ -1337,7 +1807,8 @@ export default async function handler(
             const baseSignal =
               calculatePaperSignal({
                 trendBias:
-                  ticker.trendBias,
+                  ticker
+                    .trendBias,
 
                 emaTrend:
                   primaryTechnical
@@ -1358,10 +1829,16 @@ export default async function handler(
                 orderBook
               );
 
-            const signal =
+            const timeframeSignal =
               applyMultiTimeframeConfirmation(
                 orderBookSignal,
                 hourlyTechnical
+              );
+
+            const signal =
+              applyExchangeConfirmation(
+                timeframeSignal,
+                exchangeAnalysis
               );
 
             return {
@@ -1376,10 +1853,12 @@ export default async function handler(
                   .priceChangePercent,
 
               quoteVolume:
-                ticker.quoteVolume,
+                ticker
+                  .quoteVolume,
 
               tradeCount:
-                ticker.tradeCount,
+                ticker
+                  .tradeCount,
 
               opportunityScore:
                 ticker
@@ -1390,7 +1869,8 @@ export default async function handler(
                   .opportunityLevel,
 
               trendBias:
-                ticker.trendBias,
+                ticker
+                  .trendBias,
 
               rsi14:
                 primaryTechnical
@@ -1468,6 +1948,30 @@ export default async function handler(
                 orderBook
                   .orderBookError,
 
+              exchangeConsensus:
+                exchangeAnalysis
+                  .exchangeConsensus,
+
+              exchangeSuccessCount:
+                exchangeAnalysis
+                  .exchangeSuccessCount,
+
+              exchangeBullishCount:
+                exchangeAnalysis
+                  .exchangeBullishCount,
+
+              exchangeBearishCount:
+                exchangeAnalysis
+                  .exchangeBearishCount,
+
+              exchangeNeutralCount:
+                exchangeAnalysis
+                  .exchangeNeutralCount,
+
+              exchangeDirections:
+                exchangeAnalysis
+                  .exchangeDirections,
+
               ...finalScore,
 
               ...signal,
@@ -1477,11 +1981,13 @@ export default async function handler(
         .sort(
           (a, b) => {
             const scoreA =
-              a.finalOpportunityScore ??
+              a
+                .finalOpportunityScore ??
               -1;
 
             const scoreB =
-              b.finalOpportunityScore ??
+              b
+                .finalOpportunityScore ??
               -1;
 
             return (
@@ -1527,6 +2033,12 @@ export default async function handler(
         confirmationInterval:
           CONFIRMATION_INTERVAL,
 
+        confirmationExchanges: [
+          "Bybit",
+          "OKX",
+          "Bitget",
+        ],
+
         orderBookDepth:
           ORDER_BOOK_LIMIT,
 
@@ -1537,13 +2049,16 @@ export default async function handler(
           "opportunity-v1-50pct-technical15m-v1-50pct",
 
         signalModel:
-          "trend-ema-rsi-finalscore-orderbook-mtf-v3",
+          "trend-ema-rsi-finalscore-orderbook-mtf-multiexchange-v4",
 
         multiTimeframeModel:
           "15m-primary-1h-confirmation-v1",
 
         orderBookModel:
           "depth100-quote-notional-imbalance-v1",
+
+        exchangeConfirmationModel:
+          "bybit-okx-bitget-24h-majority-v1",
 
         weights: {
           opportunityScore:
@@ -1554,12 +2069,13 @@ export default async function handler(
         },
 
         disclaimer:
-          "LONG, SHORT and WAIT are paper-trading research signals only. The 1h timeframe and order book are confirmation factors. No real trades are executed and no profit is guaranteed.",
+          "LONG, SHORT and WAIT are paper-trading research signals only. The 1h timeframe, order book, and Bybit/OKX/Bitget market direction are confirmation factors. No real trades are executed and no profit is guaranteed.",
 
         opportunities,
 
         fetchedAt:
-          new Date().toISOString(),
+          new Date()
+            .toISOString(),
       });
   } catch (error) {
     const isTimeout =
@@ -1576,7 +2092,7 @@ export default async function handler(
 
         error:
           isTimeout
-            ? "Binance requests timed out"
+            ? "Market analysis requests timed out"
             : "Unable to build combined opportunity scores",
       });
   } finally {
