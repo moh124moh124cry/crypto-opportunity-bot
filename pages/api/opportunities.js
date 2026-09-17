@@ -6,7 +6,8 @@ const DEFAULT_SYMBOLS = [
   "XRPUSDT",
 ];
 
-const INTERVAL = "15m";
+const PRIMARY_INTERVAL = "15m";
+const CONFIRMATION_INTERVAL = "1h";
 const KLINE_LIMIT = 100;
 const ORDER_BOOK_LIMIT = 100;
 
@@ -19,14 +20,18 @@ function round(value, decimals = 2) {
   return Math.round(value * factor) / factor;
 }
 
+function boostStrength(strength) {
+  if (strength === "low") return "medium";
+  if (strength === "medium") return "high";
+  return strength;
+}
+
 function calculateOpportunity(ticker) {
   const price = Number(ticker.price);
   const highPrice = Number(ticker.highPrice);
   const lowPrice = Number(ticker.lowPrice);
   const quoteVolume = Number(ticker.quoteVolume);
-  const priceChangePercent = Number(
-    ticker.priceChangePercent
-  );
+  const priceChangePercent = Number(ticker.priceChangePercent);
 
   const momentumScore = clamp(
     Math.abs(priceChangePercent) * 8,
@@ -43,8 +48,7 @@ function calculateOpportunity(ticker) {
         )
       : 0;
 
-  const rangeSize =
-    highPrice - lowPrice;
+  const rangeSize = highPrice - lowPrice;
 
   const rangePosition =
     rangeSize > 0
@@ -68,8 +72,7 @@ function calculateOpportunity(ticker) {
   if (trendBias === "bullish") {
     positionStrength = rangePosition;
   } else if (trendBias === "bearish") {
-    positionStrength =
-      100 - rangePosition;
+    positionStrength = 100 - rangePosition;
   }
 
   const positionScore = clamp(
@@ -107,8 +110,9 @@ function normalizeTicker(data) {
   const ticker = {
     symbol: data.symbol,
     price: Number(data.lastPrice),
-    priceChangePercent:
-      Number(data.priceChangePercent),
+    priceChangePercent: Number(
+      data.priceChangePercent
+    ),
     openPrice: Number(data.openPrice),
     highPrice: Number(data.highPrice),
     lowPrice: Number(data.lowPrice),
@@ -122,10 +126,7 @@ function normalizeTicker(data) {
   };
 }
 
-function calculateRsi(
-  closes,
-  period = 14
-) {
+function calculateRsi(closes, period = 14) {
   if (
     !Array.isArray(closes) ||
     closes.length <= period
@@ -136,19 +137,14 @@ function calculateRsi(
   let gainSum = 0;
   let lossSum = 0;
 
-  for (
-    let i = 1;
-    i <= period;
-    i += 1
-  ) {
+  for (let i = 1; i <= period; i += 1) {
     const change =
       closes[i] - closes[i - 1];
 
     if (change > 0) {
       gainSum += change;
     } else if (change < 0) {
-      lossSum +=
-        Math.abs(change);
+      lossSum += Math.abs(change);
     }
   }
 
@@ -167,9 +163,7 @@ function calculateRsi(
       closes[i] - closes[i - 1];
 
     const gain =
-      change > 0
-        ? change
-        : 0;
+      change > 0 ? change : 0;
 
     const loss =
       change < 0
@@ -232,10 +226,7 @@ function getRsiState(rsi) {
   return "neutral";
 }
 
-function calculateEma(
-  values,
-  period
-) {
+function calculateEma(values, period) {
   if (
     !Array.isArray(values) ||
     values.length < period
@@ -271,10 +262,7 @@ function calculateEma(
   return round(ema);
 }
 
-function getEmaTrend(
-  ema20,
-  ema50
-) {
+function getEmaTrend(ema20, ema50) {
   if (
     ema20 === null ||
     ema50 === null ||
@@ -345,9 +333,7 @@ function calculateTechnicalScore(
 
   let rsiScore = 0;
 
-  if (
-    emaTrend === "bullish"
-  ) {
+  if (emaTrend === "bullish") {
     rsiScore = clamp(
       40 -
         Math.abs(
@@ -393,9 +379,7 @@ function calculateTechnicalScore(
   let technicalLevel =
     "low";
 
-  if (
-    technicalScore >= 70
-  ) {
+  if (technicalScore >= 70) {
     technicalLevel =
       "high";
   } else if (
@@ -472,10 +456,8 @@ function calculatePaperSignal({
   ) {
     return {
       paperSignal: "WAIT",
-
       signalStrength:
         "unavailable",
-
       signalReason:
         "Insufficient technical data",
     };
@@ -511,7 +493,7 @@ function calculatePaperSignal({
     paperSignal = "LONG";
 
     signalReason =
-      "24h trend and EMA trend are bullish with supportive RSI";
+      "24h trend and 15m EMA trend are bullish with supportive RSI";
   } else if (
     finalOpportunityScore >=
       60 &&
@@ -521,11 +503,10 @@ function calculatePaperSignal({
     paperSignal = "SHORT";
 
     signalReason =
-      "24h trend and EMA trend are bearish with supportive RSI";
+      "24h trend and 15m EMA trend are bearish with supportive RSI";
   }
 
-  let signalStrength =
-    "low";
+  let signalStrength = "low";
 
   if (
     paperSignal === "WAIT"
@@ -540,8 +521,7 @@ function calculatePaperSignal({
     finalOpportunityScore >=
     65
   ) {
-    signalStrength =
-      "medium";
+    signalStrength = "medium";
   }
 
   return {
@@ -667,28 +647,13 @@ function applyOrderBookConfirmation(
     );
 
   if (aligned) {
-    let boostedStrength =
-      signal.signalStrength;
-
-    if (
-      boostedStrength ===
-      "low"
-    ) {
-      boostedStrength =
-        "medium";
-    } else if (
-      boostedStrength ===
-      "medium"
-    ) {
-      boostedStrength =
-        "high";
-    }
-
     return {
       ...signal,
 
       signalStrength:
-        boostedStrength,
+        boostStrength(
+          signal.signalStrength
+        ),
 
       orderBookConfirmation:
         "aligned",
@@ -711,19 +676,115 @@ function applyOrderBookConfirmation(
   };
 }
 
+function applyMultiTimeframeConfirmation(
+  signal,
+  hourlyTechnical
+) {
+  const hourlyTrend =
+    hourlyTechnical?.emaTrend ??
+    "unavailable";
+
+  if (
+    signal.paperSignal ===
+    "WAIT"
+  ) {
+    return {
+      ...signal,
+
+      multiTimeframeConfirmation:
+        "not-applicable",
+    };
+  }
+
+  if (
+    hourlyTrend ===
+    "unavailable"
+  ) {
+    return {
+      ...signal,
+
+      multiTimeframeConfirmation:
+        "unavailable",
+    };
+  }
+
+  if (
+    hourlyTrend === "neutral"
+  ) {
+    return {
+      ...signal,
+
+      multiTimeframeConfirmation:
+        "neutral",
+
+      signalReason:
+        `${signal.signalReason}; 1h EMA trend is neutral`,
+    };
+  }
+
+  const aligned =
+    (
+      signal.paperSignal ===
+        "LONG" &&
+      hourlyTrend ===
+        "bullish"
+    ) ||
+    (
+      signal.paperSignal ===
+        "SHORT" &&
+      hourlyTrend ===
+        "bearish"
+    );
+
+  if (aligned) {
+    const canBoost =
+      signal.orderBookConfirmation !==
+      "conflict";
+
+    return {
+      ...signal,
+
+      signalStrength:
+        canBoost
+          ? boostStrength(
+              signal.signalStrength
+            )
+          : signal.signalStrength,
+
+      multiTimeframeConfirmation:
+        "aligned",
+
+      signalReason:
+        `${signal.signalReason}; 1h EMA trend confirms ${hourlyTrend} direction`,
+    };
+  }
+
+  return {
+    ...signal,
+
+    signalStrength: "low",
+
+    multiTimeframeConfirmation:
+      "conflict",
+
+    signalReason:
+      `${signal.signalReason}; 1h EMA trend conflicts (${hourlyTrend})`,
+  };
+}
+
 async function fetchTechnical(
   symbol,
+  interval,
   signal
 ) {
   try {
     const params =
       new URLSearchParams({
         symbol,
-        interval: INTERVAL,
-        limit:
-          String(
-            KLINE_LIMIT
-          ),
+        interval,
+        limit: String(
+          KLINE_LIMIT
+        ),
       });
 
     const response =
@@ -750,6 +811,18 @@ async function fetchTechnical(
     ) {
       return {
         symbol,
+        interval,
+
+        rsi14: null,
+
+        rsiState:
+          "unavailable",
+
+        ema20: null,
+        ema50: null,
+
+        emaTrend:
+          "unavailable",
 
         technicalScore:
           null,
@@ -803,6 +876,7 @@ async function fetchTechnical(
 
     return {
       symbol,
+      interval,
 
       rsi14,
 
@@ -812,9 +886,7 @@ async function fetchTechnical(
         ),
 
       ema20,
-
       ema50,
-
       emaTrend,
 
       technicalScore:
@@ -824,10 +896,25 @@ async function fetchTechnical(
       technicalLevel:
         technical
           .technicalLevel,
+
+      technicalError:
+        null,
     };
   } catch (error) {
     return {
       symbol,
+      interval,
+
+      rsi14: null,
+
+      rsiState:
+        "unavailable",
+
+      ema20: null,
+      ema50: null,
+
+      emaTrend:
+        "unavailable",
 
       technicalScore:
         null,
@@ -853,10 +940,9 @@ async function fetchOrderBook(
       new URLSearchParams({
         symbol,
 
-        limit:
-          String(
-            ORDER_BOOK_LIMIT
-          ),
+        limit: String(
+          ORDER_BOOK_LIMIT
+        ),
       });
 
     const response =
@@ -984,7 +1070,6 @@ export default async function handler(
       .status(405)
       .json({
         ok: false,
-
         error:
           "Method not allowed",
       });
@@ -1027,7 +1112,7 @@ export default async function handler(
     setTimeout(
       () =>
         controller.abort(),
-      12000
+      15000
     );
 
   try {
@@ -1104,7 +1189,8 @@ export default async function handler(
       );
 
     const [
-      technicalResults,
+      primaryTechnicalResults,
+      hourlyTechnicalResults,
       orderBookResults,
     ] =
       await Promise.all([
@@ -1113,6 +1199,18 @@ export default async function handler(
             (ticker) =>
               fetchTechnical(
                 ticker.symbol,
+                PRIMARY_INTERVAL,
+                controller.signal
+              )
+          )
+        ),
+
+        Promise.all(
+          tickers.map(
+            (ticker) =>
+              fetchTechnical(
+                ticker.symbol,
+                CONFIRMATION_INTERVAL,
                 controller.signal
               )
           )
@@ -1129,9 +1227,19 @@ export default async function handler(
         ),
       ]);
 
-    const technicalBySymbol =
+    const primaryTechnicalBySymbol =
       new Map(
-        technicalResults.map(
+        primaryTechnicalResults.map(
+          (item) => [
+            item.symbol,
+            item,
+          ]
+        )
+      );
+
+    const hourlyTechnicalBySymbol =
+      new Map(
+        hourlyTechnicalResults.map(
           (item) => [
             item.symbol,
             item,
@@ -1153,15 +1261,54 @@ export default async function handler(
       tickers
         .map(
           (ticker) => {
-            const technical =
-              technicalBySymbol.get(
+            const primaryTechnical =
+              primaryTechnicalBySymbol.get(
                 ticker.symbol
               ) || {
+                rsi14: null,
+
+                rsiState:
+                  "unavailable",
+
+                ema20: null,
+                ema50: null,
+
+                emaTrend:
+                  "unavailable",
+
                 technicalScore:
                   null,
 
                 technicalLevel:
                   "unavailable",
+
+                technicalError:
+                  "15m technical result unavailable",
+              };
+
+            const hourlyTechnical =
+              hourlyTechnicalBySymbol.get(
+                ticker.symbol
+              ) || {
+                rsi14: null,
+
+                rsiState:
+                  "unavailable",
+
+                ema20: null,
+                ema50: null,
+
+                emaTrend:
+                  "unavailable",
+
+                technicalScore:
+                  null,
+
+                technicalLevel:
+                  "unavailable",
+
+                technicalError:
+                  "1h technical result unavailable",
               };
 
             const orderBook =
@@ -1180,8 +1327,11 @@ export default async function handler(
 
             const finalScore =
               calculateFinalScore(
-                ticker.opportunityScore,
-                technical.technicalScore
+                ticker
+                  .opportunityScore,
+
+                primaryTechnical
+                  .technicalScore
               );
 
             const baseSignal =
@@ -1190,22 +1340,28 @@ export default async function handler(
                   ticker.trendBias,
 
                 emaTrend:
-                  technical.emaTrend ??
-                  "neutral",
+                  primaryTechnical
+                    .emaTrend,
 
                 rsi14:
-                  technical.rsi14 ??
-                  null,
+                  primaryTechnical
+                    .rsi14,
 
                 finalOpportunityScore:
                   finalScore
                     .finalOpportunityScore,
               });
 
-            const signal =
+            const orderBookSignal =
               applyOrderBookConfirmation(
                 baseSignal,
                 orderBook
+              );
+
+            const signal =
+              applyMultiTimeframeConfirmation(
+                orderBookSignal,
+                hourlyTechnical
               );
 
             return {
@@ -1237,37 +1393,68 @@ export default async function handler(
                 ticker.trendBias,
 
               rsi14:
-                technical.rsi14 ??
-                null,
+                primaryTechnical
+                  .rsi14,
 
               rsiState:
-                technical.rsiState ??
-                "unavailable",
+                primaryTechnical
+                  .rsiState,
 
               ema20:
-                technical.ema20 ??
-                null,
+                primaryTechnical
+                  .ema20,
 
               ema50:
-                technical.ema50 ??
-                null,
+                primaryTechnical
+                  .ema50,
 
               emaTrend:
-                technical.emaTrend ??
-                "neutral",
+                primaryTechnical
+                  .emaTrend,
 
               technicalScore:
-                technical
+                primaryTechnical
                   .technicalScore,
 
               technicalLevel:
-                technical
+                primaryTechnical
                   .technicalLevel,
 
               technicalError:
-                technical
-                  .technicalError ??
-                null,
+                primaryTechnical
+                  .technicalError,
+
+              rsi14_1h:
+                hourlyTechnical
+                  .rsi14,
+
+              rsiState_1h:
+                hourlyTechnical
+                  .rsiState,
+
+              ema20_1h:
+                hourlyTechnical
+                  .ema20,
+
+              ema50_1h:
+                hourlyTechnical
+                  .ema50,
+
+              emaTrend_1h:
+                hourlyTechnical
+                  .emaTrend,
+
+              technicalScore_1h:
+                hourlyTechnical
+                  .technicalScore,
+
+              technicalLevel_1h:
+                hourlyTechnical
+                  .technicalLevel,
+
+              technicalError_1h:
+                hourlyTechnical
+                  .technicalError,
 
               imbalancePercent:
                 orderBook
@@ -1279,8 +1466,7 @@ export default async function handler(
 
               orderBookError:
                 orderBook
-                  .orderBookError ??
-                null,
+                  .orderBookError,
 
               ...finalScore,
 
@@ -1335,8 +1521,11 @@ export default async function handler(
         mode:
           "paper-trading",
 
-        interval:
-          INTERVAL,
+        primaryInterval:
+          PRIMARY_INTERVAL,
+
+        confirmationInterval:
+          CONFIRMATION_INTERVAL,
 
         orderBookDepth:
           ORDER_BOOK_LIMIT,
@@ -1345,10 +1534,13 @@ export default async function handler(
           opportunities.length,
 
         finalScoreModel:
-          "opportunity-v1-50pct-technical-v1-50pct",
+          "opportunity-v1-50pct-technical15m-v1-50pct",
 
         signalModel:
-          "trend-ema-rsi-finalscore-orderbook-v2",
+          "trend-ema-rsi-finalscore-orderbook-mtf-v3",
+
+        multiTimeframeModel:
+          "15m-primary-1h-confirmation-v1",
 
         orderBookModel:
           "depth100-quote-notional-imbalance-v1",
@@ -1357,12 +1549,12 @@ export default async function handler(
           opportunityScore:
             0.5,
 
-          technicalScore:
+          technicalScore15m:
             0.5,
         },
 
         disclaimer:
-          "LONG, SHORT and WAIT are paper-trading research signals only. Order book data is short-lived and used only as a confirmation factor. No real trades are executed and no profit is guaranteed.",
+          "LONG, SHORT and WAIT are paper-trading research signals only. The 1h timeframe and order book are confirmation factors. No real trades are executed and no profit is guaranteed.",
 
         opportunities,
 
