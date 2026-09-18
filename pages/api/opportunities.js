@@ -8,6 +8,21 @@ const DEFAULT_SYMBOLS = [
   "BNBUSDT",
   "SOLUSDT",
   "XRPUSDT",
+  "DOGEUSDT",
+  "ADAUSDT",
+  "TRXUSDT",
+  "AVAXUSDT",
+  "LINKUSDT",
+  "DOTUSDT",
+  "LTCUSDT",
+  "BCHUSDT",
+  "SUIUSDT",
+  "TONUSDT",
+  "NEARUSDT",
+  "APTUSDT",
+  "ARBUSDT",
+  "OPUSDT",
+  "UNIUSDT",
 ];
 
 const PRIMARY_INTERVAL = "15m";
@@ -1534,7 +1549,7 @@ export default async function handler(
     setTimeout(
       () =>
         controller.abort(),
-      15000
+      25000
     );
 
   try {
